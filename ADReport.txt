@@ -1,0 +1,75 @@
+Import-Module -Name ActiveDirectory
+$domobj = get-addomain
+$Domain = $domobj.NetBIOSName
+$DateSave = get-date -format d.M.yyyy
+$1DaysAgo = (Get-Date).AddDays(-1)
+$3MonthsAgo = (Get-Date).AddDays(-90)
+$RootDSE = [System.DirectoryServices.DirectoryEntry]([ADSI]"LDAP://RootDSE")
+$CfgNC = $RootDSE.Get("configurationNamingContext")
+
+New-Item -ItemType directory -Path C:\admin -force
+Write-Host "Finding users accounts that were created in the last 24 hrs." 
+	Get-ADUser -Filter * -Properties whenCreated | where { $_.whenCreated -ge $1DayAgo } | select SamAccountName,whenCreated |Sort-Object -Property whenCreated | Export-csv "C:\admin\Users created.csv" -NoType
+Write-Host "Finding users with the flag password never expires set" 
+	Get-ADUser -Filter * -Properties PasswordNeverExpires | where { $_.PasswordNeverExpires -eq $true } | select SamAccountName | Sort-Object -Property SamAccountName | Export-csv "C:\admin\Users PW Never Expires.csv" -NoType
+Write-Host "Finding disabled users" 
+	Get-ADUser -Filter "Enabled -eq '$false'" | Select SamAccountName | Sort-Object -Property SamAccountName |Sort-Object -Property SamAccountName | Export-csv "C:\admin\Users disabled.csv" –NoType
+Write-Host "Finding users that never changed their passwords" 
+	Get-ADUser –filter * -Properties PasswordLastSet | where { $_.passwordLastSet –eq $null } | Select SamAccountName, enabled | Sort-Object -Property SamAccountName | Export-csv "C:\admin\Users never changed PW.csv" -NoType
+Write-Host "Finding computers that have not been logged into for more than 90 days" 
+	Get-ADComputer -Property Name,lastLogonDate -Filter {lastLogonDate -lt $3MonthsAgo} | Select Name,lastLogonDate | Sort-Object -Property Name | Export-csv "C:\admin\Computers LastLogon 90d ago.csv" -NoType
+Write-Host "Finding disabled computers" 
+	Get-ADComputer -Property Name -Filter "Enabled -eq '$false'" | Select Name | Sort-Object -Property Name | Export-csv "C:\admin\Computers Disabled.csv" -NoType
+Write-Host "Finding all DCs in your Domain"
+	Get-ADDomainController -Filter * | Select Name | Sort-Object -Property Name | Export-csv "C:\admin\$Domain Domain Controllers.csv" -NoType
+Write-Host "Finding all DHCP servers in your Forest"
+	Get-ADObject -SearchBase "$CfgNC" -Filter "objectclass -eq 'dhcpclass' -AND Name -ne 'dhcproot'" | select name | Sort-Object -Property Name | Export-csv "C:\admin\$Domain DHCP Servers.csv" -NoType
+Write-Host "Finding all AD Sites in your Forest"
+	$Sites = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest().Sites           
+	$SitesObject = @() 
+	foreach ($Site in $Sites) {            
+ 		$SitesObject += New-Object -Type PSObject -Property (            
+  			@{            
+   	 			"SiteName"  = $Site.Name;          
+  			}            
+ 		)            
+	}
+	$SitesObject | Export-Csv "C:\admin\$Domain AD Sites.csv" -NoType
+Write-Host "Finding FSMO role holders in your Forest"
+	Get-ADForest | Select SchemaMaster,DomainNamingMaster | export-csv "c:\admin\FSMOs Forest.csv" -NoType
+Write-Host "Finding FSMO role holders in your Domain"
+	Get-ADDomain | Select PDCEmulator,RIDMaster,InfrastructureMaster | export-csv "c:\admin\FSMOs $Domain Domain.csv" -NoType
+Write-Host "Finding $Domain PW Policy"
+	Get-ADDefaultDomainPasswordPolicy >"C:\admin\$Domain Password Policy.csv"
+Write-Host "Finding $Domain OUs"
+	Get-ADOrganizationalUnit -Filter * -Properties CanonicalName | Select-Object -Property CanonicalName >"C:\admin\$Domain OUs.csv"
+
+$CSVFiles = Get-ChildItem C:\admin\* -Include *.csv
+$CSVFilename = "C:\admin\AD_Report_$DateSave.xlsx"
+Write-Host "Saving AD report to: $CSVFilename"
+$excelapp = new-object -comobject Excel.Application
+$excelapp.sheetsInNewWorkbook = $CSVFiles.Count
+$xlsx = $excelapp.Workbooks.Add()
+$Sheet=1
+foreach($CSV in $CSVFiles)
+{
+	$Row=1
+	$Column=1
+	$Worksheet = $xlsx.Worksheets.Item($Sheet)
+	$Worksheet.Name = $CSV.Name
+	$File = (Get-Content $CSV)
+	foreach($Line in $File)
+	{
+		$Linecontents=$Line -split ‘,(?!\s*\w+”)’
+		foreach($cell in $Linecontents)
+		{
+			$Worksheet.Cells.Item($Row,$Column) = $cell
+			$Column++
+		}
+	$Column=1
+	$Row++
+	}
+	$Sheet++
+}
+$xlsx.SaveAs($CSVFilename)
+$excelapp.quit()

@@ -1,0 +1,16 @@
+﻿$ListofScopeLease1 = @()
+$ListofScopeLease2 = @()
+$DHCPServer1 = "HOST1"
+$DHCPServer2 = "HOST2"
+
+$Scopes1 = Get-DhcpServerv4Scope -ComputerName $DHCPServer1
+ForEach ($IScope1 in $Scopes1)
+{
+$ListofScopeLease1 += Get-DhcpServerv4Lease -Computername $DHCPServer1 -ScopeId $IScope1.ScopeId
+}$ListofScopeLease1 | Export-Csv .\Server1_Lease.csv -NoTypeInformation
+
+$Scopes2 = Get-DhcpServerv4Scope -ComputerName $DHCPServer2
+ForEach ($IScope2 in $Scopes2)
+{
+$ListofScopeLease2 += Get-DhcpServerv4Lease -Computername $DHCPServer2 -ScopeId $IScope2.ScopeId
+}$ListofScopeLease2 | Export-Csv .\Server2_Lease.csv -NoTypeInformation

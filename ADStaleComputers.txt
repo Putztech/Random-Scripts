@@ -1,0 +1,11 @@
+﻿# Gets time stamps for all computers in the domain that have NOT logged in since after specified date 
+Import-Module ActiveDirectory  
+$domain = "domain.mydom.com"  
+$DaysInactive = 90  
+$time = (Get-Date).Adddays(-($DaysInactive)) 
+  
+# Get all AD computers with lastLogonTimestamp less than our time 
+Get-ADComputer -Filter {LastLogon -lt $time} -Properties LastLogon | 
+  
+# Output hostname and lastLogonTimestamp into CSV 
+select-object Name,@{Name="TimeStamp"; Expression={[DateTime]::FromFileTime($_.LastLogon)}}, DistinguishedName | export-csv .\ADStaleComputers.csv -NoTypeInformation

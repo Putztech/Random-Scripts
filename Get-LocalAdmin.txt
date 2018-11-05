@@ -1,0 +1,11 @@
+﻿Function Get-LocalAdmin {
+param ($strcomputer)
+
+$admins = Get-WmiObject Win32_GroupUser -ComputerName $strcomputer
+$admins = $admins | Where-Object {$_.groupcomponent -like '*"Administrators"'}
+
+$admins |% {
+$_.partcomponent -match ".+Domain\=(.+)\,Name\=(.+)$" > $null
+$matches[1].trim('"') + "\" + $matches[2].trim('"')
+}
+}

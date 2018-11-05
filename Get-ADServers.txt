@@ -1,0 +1,1 @@
+﻿Get-ADComputer -SearchBase "Server OU" -Filter * -Properties * | Select-Object Name,Description,IPv4Address | Export-Csv .\Server_Pull.csv -NoTypeInformation

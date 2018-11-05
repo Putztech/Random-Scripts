@@ -1,0 +1,3 @@
+﻿Import-Module ActiveDirectory
+Get-ADGroup -Filter * -Properties * Members | Where-Object {-not $_.Members} |
+    Select-Object Name, DistinguishedName | Export-Csv .\EmptyGroups.csv -NoTypeInformation

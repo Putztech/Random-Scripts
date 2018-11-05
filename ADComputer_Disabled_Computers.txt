@@ -1,0 +1,2 @@
+Import-Module ActiveDirectory
+Get-ADComputer -Filter 'Enabled -eq $False' -Properties Enabled | Select-Object Name, Enabled, DistinguishedName | Export-Csv .\DisabledComputers.csv -NoTypeInformation

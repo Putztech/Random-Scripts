@@ -1,0 +1,14 @@
+Import-Module activedirectory
+$w = (Get-AdComputer -Filter *).name
+#$w = (Get-AdComputer -Filter * -searchbase "distinguishedname").name
+
+ForEach ($comp in $w)
+	{
+	if(Test-Connection $comp -count 4 -quiet -ErrorAction SilentlyContinue)
+		{
+		if(test-path \\$comp\c$\Windows\SysWOW64)
+			{$comp | out-file .\64Bit-Computers.txt -append; write-host "64" -Foreground Red}
+		else
+			{$comp | out-file .\32Bit-Computers.txt -append; write-host "32" -Foreground Green}
+		}
+	}

@@ -1,0 +1,2 @@
+﻿Import-Module ActiveDirectory
+Get-AdComputer -Filter * | Select Name, Enabled, DistingishedName | Export-Csv .\ADComputer_Enabled.csv -NoTypeInformation

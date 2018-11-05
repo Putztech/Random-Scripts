@@ -1,0 +1,2 @@
+﻿Import-Module ActiveDirectory
+Get-ADComputer -Filter * -Properties IPv4Address, OperatingSystem | Format-Table Name, IPv4Address, OperatingSystem | Export-Csv .\ComputersAndIPs.csv -NoTypeInformation

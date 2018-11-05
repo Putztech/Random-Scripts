@@ -1,0 +1,321 @@
+cls
+
+ $tableOSName = "OperatingSystems"
+
+ $tableOS = New-Object system.Data.DataTable “$tableOSName”
+
+$colOS = New-Object system.Data.DataColumn OperatingSystem,([string])
+
+ $colOSversion = New-Object system.Data.DataColumn OperatingSystemVersion,([string])
+
+ $colOSType = New-Object system.Data.DataColumn OperatingSystemType,([string])
+
+ $tableOS.columns.add($colOS)
+
+ $tableOS.columns.add($colOSversion)
+
+ $tableOS.columns.add($colOSType)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 10"
+
+ $rowtableOS.OperatingSystemVersion = "6.4"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 8.1"
+
+ $rowtableOS.OperatingSystemVersion = "6.3"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 8"
+
+ $rowtableOS.OperatingSystemVersion = "6.2"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 7"
+
+ $rowtableOS.OperatingSystemVersion = "6.1"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Vista"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $rowtableOS.OperatingSystemVersion = "6.0"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows XP 64-Bit Edition"
+
+ $rowtableOS.OperatingSystemVersion = "5.2"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows XP"
+
+ $rowtableOS.OperatingSystemVersion = "5.1"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 2000 Professional"
+
+ $rowtableOS.OperatingSystemVersion = "5.0"
+
+ $rowtableOS.OperatingSystemType = "WorkStation"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server 2016"
+
+ $rowtableOS.OperatingSystemVersion = "10.0"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server 2012 R2"
+
+ $rowtableOS.OperatingSystemVersion = "6.3"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server 2012"
+
+ $rowtableOS.OperatingSystemVersion = "6.2"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server 2008 R2"
+
+ $rowtableOS.OperatingSystemVersion = "6.1"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server® 2008"
+
+ $rowtableOS.OperatingSystemVersion = "6.0"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows Server 2003"
+
+ $rowtableOS.OperatingSystemVersion = "5.2"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 2000 Server"
+
+ $rowtableOS.OperatingSystemVersion = "5.0"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 2000 Advanced Server"
+
+ $rowtableOS.OperatingSystemVersion = "5.0"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ $rowtableOS = $tableOS.NewRow()
+
+ $rowtableOS.OperatingSystem = "Windows 2000 Datacenter Server"
+
+ $rowtableOS.OperatingSystemVersion = "5.0"
+
+ $rowtableOS.OperatingSystemType = "Server"
+
+ $tableOS.Rows.Add($rowtableOS)
+
+ ##### WORKSTATIONS #####
+
+ write-host "WorkStation Operating Systems : " -foregroundcolor "Green"
+
+ $WorkStationCount = 0
+
+ foreach ($object in ($tableOS | where {$_.OperatingSystemType -eq 'WorkStation'}))
+
+ {
+
+       $LDAPFilter = "(&(operatingsystem=" + $object.OperatingSystem + "*)(operatingsystemversion=" + $object.OperatingSystemVersion + "*))"
+
+       $OSCount = (Get-ADComputer -LDAPFilter $LDAPFilter).Count
+
+       if ($OSCount -ne $null)
+
+       {
+
+             "" + $object.OperatingSystem  + ": " + $OSCount + ""
+
+       }
+
+       else
+
+       {
+
+             "" + $object.OperatingSystem  + ": 0"
+
+             $OSCount = 0
+
+       }
+
+       $WorkStationCount += $OSCount
+
+ }
+
+ $WorkStationTotalNumber = "Total Number : " + $WorkStationCount + ""
+
+ write-host $WorkStationTotalNumber -foregroundcolor "Yellow"
+
+ ##### SERVERS #####
+
+ write-host ""
+
+ write-host "Server Operating Systems : " -foregroundcolor "Green"
+
+ $ServerCount = 0
+
+ foreach ($object in ($tableOS | where {$_.OperatingSystemType -eq 'Server'}))
+
+ {
+
+       $LDAPFilter = "(&(operatingsystem=" + $object.OperatingSystem + "*)(operatingsystemversion=" + $object.OperatingSystemVersion + "*))"
+
+       $OSCount = (Get-ADComputer -LDAPFilter $LDAPFilter).Count
+
+       if ($OSCount -ne $null)
+
+       {
+
+             "" + $object.OperatingSystem  + ": " + $OSCount + ""
+
+       }
+
+       else
+
+       {
+
+             "" + $object.OperatingSystem  + ": 0"
+
+             $OSCount = 0
+
+       }
+
+       $ServerCount += $OSCount
+
+ }
+
+ $ServerTotalNumber = "Total Number : " + $ServerCount + ""
+
+ write-host $ServerTotalNumber -foregroundcolor "Yellow"
+
+ ##### OTHER OPERATING SYSTEMS #####
+
+ write-host ""
+
+ $LDAPFilter = "(&(operatingsystem=*)"
+
+ foreach ($object in $tableOS)
+
+ {
+
+       $LDAPFilter += "(!(&(operatingsystem=" + $object.OperatingSystem + "*)(operatingsystemversion=" + $object.OperatingSystemVersion + "*)))"
+
+ }
+
+ $LDAPFilter += ")"
+
+ $OthersCount = (Get-ADComputer -LDAPFilter $LDAPFilter).Count
+
+ $OthersTotalNumber = "Total Number : " + $OthersCount + ""
+
+ write-host "Other Operating Systems : " -foregroundcolor "Green"
+
+ write-host $OthersTotalNumber -foregroundcolor "Yellow" 
+
+ ##### NO OPERATING SYSTEM #####
+
+ Write-Host ""
+
+ Write-Host "No Operating System:" -ForegroundColor "Green"
+
+ $TotalwithOS = $WorkStationCount + $ServerCount + $OthersCount
+
+ $TotalSystems = (Get-ADComputer -Filter * -Property * | select OperatingSystem).count
+
+ $NullCount = $TotalSystems - $TotalwithOS
+
+ $NullTotalNumber = "Total Number: " + $NullCount + ""
+
+ Write-Host $NullTotalNumber -ForegroundColor "Yellow"
+
+ ##### TOTAL NUMBER OF SYSTEMS #####
+
+ Write-Host ""
+
+ Write-Host "Total Number of Systems: " -ForegroundColor "Green"
+
+ $TotalNumberofSystems = $TotalwithOS + $NullCount
+
+ $TotalCount = "Total Number: " +  $TotalNumbersofSystems + ""
+
+ Write-Host $TotalCount -ForegroundColor "Yellow"

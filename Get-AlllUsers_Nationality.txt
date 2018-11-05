@@ -1,0 +1,2 @@
+﻿Import-Module ActiveDirectory
+Get-ADUser -Filter * -Properties * | Select-Object Name, sAMAccountName, Enabled, @{Label="Nationality";Expression={($_.extensionAttribute8)}},DistinguishedName | Export-Csv .\Name_Nationality.csv -NoTypeInformation 

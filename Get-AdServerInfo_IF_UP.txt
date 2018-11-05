@@ -1,0 +1,17 @@
+﻿$Output = @()
+Get-ADComputer -Filter {OperatingSystem -like "Windows Server*"} -Properties DNSHostName, cn | Where-Object {$_.Enabled} | Select-Object Name | Out-File .\Server_List.txt
+$names = Get-Content .\Server_List.txt
+ForEach ($name in $names)
+    {
+    if(Test-Connection $name -Count 1 -Quiet -ErrorAction SilentlyContinue)
+        {
+        $Output+= Get-AdComputer -Identity $name -Properties Name,Description,IPv4Address | Select-Object Name,Description,IPv4Address
+        Write-Host "$name,UP"
+        }
+    else
+        {
+        $Output+= "$name,DOWN"
+        Write-Host "$name,DOWN"
+        }
+    }
+$Output | Export-Csv .\ServerInfo_IF_UP.csv

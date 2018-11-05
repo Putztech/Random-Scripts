@@ -1,0 +1,324 @@
+﻿<#	
+.SYNOPSIS
+    Imports a list of computer/server names from a CSV file and gets logon event information from Security 
+    Logs in Event Viewer
+
+.PARAMETER InputFile
+    Path for the Input CSV file
+
+.PARAMETER LastDays
+    Optional Parameter to check for number of previous days.
+    Default value is 1 (to check for the previous 24 hours only)
+
+.PARAMETER StartTranscript
+    Switch to start transcript and store in current directory as text file.
+
+.DESCRIPTION
+    Takes an input CSV file with the column 'ServerName' and runs the Get-EventLog command to get
+    all '4264' ID Events from Security Log 
+    (NOTE***: Logon Events - needs to be enabled with "Advance Audit Configuration"
+    group policy for these events to appear in the Security Logs before using this script)
+    
+    Scipt Steps:
+    - First it will check if the server/computer is contactable using PING
+    - Next, it will run the Get-EventLog command for that item
+    - It will find all the 4264 events in the Security Log and narrow them down to
+       only '2' and '10' logon types which correspond to Local and Remote logons
+    - These will be exported into a CSV file
+    - Any errors found during PING/Get-EventLog command are exported into CSV file with 
+       'Failed-PING' or 'ERROR-EventLog' or 'ERROR-Server' in the ConnectionStatus Column 
+       of the Output CSV file. 
+       For detailed error information, the full error is appended to the Output Error Log.       
+    
+.INPUTS
+    InputFile - CSV File with "," delimited attributes. Must include a column with header 
+        'ServerName'
+
+.OUTPUTS
+    AuditLogonEvents.csv - CSV file containing list of all items processed with results
+    AuditLogonEvents-Transcript - TXT file contains PowerShell transcript (if StartTranscript is used)
+    AuditLogonEvents-Errors.txt - Text file containing ALL runtime errors
+
+.EXAMPLE
+    PS C:\> .\get_AuditLogonEvents.ps1 -InputFile Servers.csv
+    
+    Runs script for all servers in the input CSV file. Runs a Get-EventLog command for the last 1 day for
+    each server and returns the required information to CSV file Output.
+
+.EXAMPLE
+    PS C:\> .\get_AuditLogonEvents.ps1 -InputFile Servers.csv -LastDays 5
+
+    Runs script for all servers in the input CSV file. Runs a Get-EventLog command for the last 5 days for
+    each server and returns the required information to CSV file Output.
+
+.EXAMPLE
+    PS C:\> .\get_AuditLogonEvents.ps1 -InputFile Servers.csv -StartTranscript
+
+    Runs script for all servers in the input CSV file and additionally outputs PS transcript. 
+
+
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $True)]
+    [ValidateNotNullOrEmpty()]
+        [string]$InputFile,    
+        [int]$LastDays = 1,    
+        [switch]$StartTranscript = $False
+    )
+
+$CurrentDate = (Get-Date -Format "dd-MM-yyyy_HH-mm-ss")
+$count = 0
+
+#region----------------------------------------------[Parameter Declarations]---------------------------------------------------
+
+$OutputCSV = ".\AuditLogonEvents_$CurrentDate.csv"
+$OutputTranscript = ".\AuditLogonEvents-Transcript_$CurrentDate.txt"
+$OutputErrorLog = ".\AuditLogonEvents-Errors.txt"
+$CurrentPreference = $Global:ErrorActionPreference
+$Global:ErrorActionPreference = 'Stop'
+$CurrentVerbose = $Global:VerbosePreference
+$Global:VerbosePreference = 'Continue'
+#endregion
+
+
+#region--------------------------------------------------[Execution Start]-------------------------------------------------------
+
+if ($StartTranscript -eq $True)
+{
+    Start-Transcript -Path $OutputTranscript
+}
+
+#region: Add Header to Output
+Write-Output "`n`n
+Starting script ***get_AuditLogonEvents*** with parameters set as
+------------------------------------------------------
+InputFile = $InputFile
+StartTranscript = $StartTranscript
+Last Days = $LastDays
+Output CSV File = $OutputCSV
+Output Transcript = $OutputTranscript
+------------------------------------------------------" 
+
+$Current = (Get-Date -Format "dd-MM-yyyy HH:mm:ss")
+
+#endregion
+
+#Import CSV file into variable for processing
+Write-Verbose "Importing CSV File for list of server names to process..." 
+$Items = (Import-CSV $InputFile -ErrorAction Stop | Select-Object -Property ServerName) 
+
+#region: Loop to process each server
+foreach($Item in $Items)
+{
+
+    $Error.Clear()
+
+    Write-Verbose "  | Running Test-Connection for $($Item.ServerName)..."     
+        
+    $ServerName = $Item.ServerName
+    Write-Verbose "        [Test-Connection] $ServerName" 
+    $Ping = (Test-Connection $ServerName -Count 1 -ErrorAction SilentlyContinue)
+
+    try
+    {
+        if($Ping)
+        {
+            Write-Verbose "        Ping SUCCEEDED!"
+            $Status = "Connected"
+
+            Remove-Job *
+            Write-Verbose "  | Starting to process server event logs.."
+        
+            try
+            {
+                Write-Verbose "  |   | Getting Events from Get-EventLog command..."
+                Write-Verbose "        [Get-EventLog] -ComputerName $ServerName
+                                                      -LogName Security
+                                                      -InstanceID 4624"
+                $Events = (Get-EventLog -ComputerName $ServerName -LogName Security -InstanceId 4624 `
+                                    -After (Get-Date).AddDays(-$LastDays) -ErrorAction Stop | `
+                                    Where-Object {($_.Message -match "Logon Type:\s+2") `
+                                              -or ($_.Message -match "Logon Type:\s+10")})
+
+                Write-Verbose "  |   | Found $($Events.count) Events!"
+                Write-Verbose "  |   | Beginning to process each event to get login information..."
+
+                $EventCount = 0
+
+                foreach($Event in $Events)
+                {
+                    $EventCount++
+                    Write-Verbose "  |   |   | Getting the logon information for Event $EventCount"
+                    $Event.Message -match "Logon Type:\s+(\d+)" | Out-Null
+                    $LogonTypeNumber = $Matches[1]
+
+                    if($LogonTypeNumber -eq 2)
+                    {
+                        $LogonType = "Local"
+                        $User = $Event.ReplacementStrings[5]
+                        $Domain = $Event.ReplacementStrings[6]
+                        $Time = $Event.TimeGenerated.ToLongTimeString()
+                        $IPAddress = "N/A"
+                    }
+                    if($LogonTypeNumber -eq 10)
+                    {
+                        $LogonType = "Remote"
+                        $User = $Event.ReplacementStrings[5]
+                        $Domain = $Event.ReplacementStrings[6]
+                        $IPAddress = $Event.ReplacementStrings[18]
+                        $Time = $Event.TimeGenerated.ToLongTimeString() 
+                    }
+
+                    Write-Verbose "  |   |   |   | Creating New Object to Export to CSV..."
+                    $Properties = [ordered]@{
+                                     'ServerName' = $ServerName;
+                                     'ConnectionStatus' = $Status;
+                                     'UserName' = $User;
+                                     'UserDomain' = $Domain;
+                                     'LogonType' = $LogonType;
+                                     'IPAddress' = $IPAddress;
+                                     'Time' = $Time;
+                     
+                          }
+    
+                    $Object = New-Object -TypeName PSObject -Property $Properties -ErrorAction Stop
+        
+                    Write-Verbose "  |   |   |   | Exporting Object to CSV file..."
+                    $Object | Export-Csv -Path $OutputCSV -NoTypeInformation -Append -ErrorAction Stop
+                }
+
+            }                   
+    
+            catch
+            {
+                Write-Host "[ERRORCATCH-EventLogs]: Below Error occured during event log processing for server $ServerName." `
+                     -ForegroundColor Red
+                Write-Host "Error is appended to Error Logs" -ForegroundColor Red
+                $Error[0]
+                "Error Occured on for Server $ServerName on $(Get-Date)`n`n" >> $OutputErrorLog
+                $Error[0] >> $OutputErrorLog
+                "--------------------------------------------------" >> $OutputErrorLog
+                
+                Write-Verbose "  |   |   |   | Creating New Object to Export to CSV..."
+                $Properties = [ordered]@{
+                                    'ServerName' = $ServerName;
+                                    'ConnectionStatus' = "ERROR-EventLog";
+                                    'UserName' = $Null;
+                                    'UserDomain' = $Null;
+                                    'LogonType' = $Null;
+                                    'IPAddress' = $Null;
+                                    'Time' = $Null;
+                     
+                          }
+    
+                $Object = New-Object -TypeName PSObject -Property $Properties -ErrorAction Stop
+        
+                Write-Verbose "  |   |   |   | Exporting Object to CSV file..."
+                $Object | Export-Csv -Path $OutputCSV -NoTypeInformation -Append -ErrorAction Stop
+
+            }
+
+        }
+
+        else
+        {
+            Write-Verbose "    Ping FAILED!"
+            Write-Verbose "  |   | Creating New Object to Export to CSV..."
+            $Properties = [ordered]@{
+                                     'ServerName' = $ServerName;
+                                     'ConnectionStatus' = "Failed-PING";
+                                     'UserName' = $Null;
+                                     'UserDomain' = $Null;
+                                     'LogonType' = $Null;
+                                     'IPAddress' = $Null;
+                                     'Time' = $Null;
+                     
+                          }
+    
+            $Object = New-Object -TypeName PSObject -Property $Properties -ErrorAction Stop
+        
+            Write-Verbose "  |   |   | Exporting Object to CSV file..."
+            $Object | Export-Csv -Path $OutputCSV -NoTypeInformation -Append -ErrorAction Stop
+        
+        }
+    
+        
+        $count++
+    }
+
+    catch
+    {
+        Write-Host "[ERRORCATCH-Server]: Below Error occured during script runtime" -ForegroundColor Red
+        $Error[0]
+        Write-Host "Error is appended to Error Logs" -ForegroundColor Red
+        $Error[0]
+        "Error Occured for Server $ServerName on $(Get-Date)`n`n" >> $OutputErrorLog
+        $Error[0] >> $OutputErrorLog
+        "--------------------------------------------------" >> $OutputErrorLog
+        
+        Write-Verbose "  |   |   |   | Creating New Object to Export to CSV..."
+        $Properties = [ordered]@{
+                            'ServerName' = $ServerName;
+                            'ConnectionStatus' = "ERROR-Server";
+                            'UserName' = $Null;
+                            'UserDomain' = $Null;
+                            'LogonType' = $Null;
+                            'IPAddress' = $Null;
+                            'Time' = $Null;
+                     
+                    }
+    
+        $Object = New-Object -TypeName PSObject -Property $Properties -ErrorAction Stop
+        
+        Write-Verbose "  |   |   |   | Exporting Object to CSV file..."
+        $Object | Export-Csv -Path $OutputCSV -NoTypeInformation -Append -ErrorAction Stop 
+}
+
+    finally
+    {
+        $TotalCount = $count
+	    if($TotalCount -ne 1)
+        {
+            $Percent = [math]::Round(($TotalCount/$Items.count * 100),2)
+
+            Write-Progress -Activity "Processing Server Event Logs..." `
+	            -Status "Progress: $Totalcount/$($Items.count)   $Percent% " `
+	            -PercentComplete $Percent `
+	            -CurrentOperation "Last Completed Server - $($Item.ServerName)"
+        }
+    }
+
+}
+#endregion
+
+$Global:ErrorActionPreference = $CurrentPreference
+$Global:VerbosePreference = $CurrentVerbose
+
+if ($StartTranscript -eq $True)
+{
+    Stop-Transcript
+}
+
+
+#endregion
+
+
+#region------------------------------------------------[End Processing]-----------------------------------------------------------
+
+#region: Add footer to Output
+$CurrentEnd = (Get-Date -Format "dd-MM-yyyy HH:mm:ss")
+						 
+Write-Output "`n`n`n**************************End Script**************************`n`n" 
+Write-Output "Script Ended on $CurrentEnd
+Total Items Processed = $count
+
+"
+
+#endregion
+
+#endregion
+
+
+#--------------------------------------------------------------***End Script***----------------------------------------------------------

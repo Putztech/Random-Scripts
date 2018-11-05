@@ -1,0 +1,16 @@
+﻿$Output = @()
+$names = Get-Content .\Computer_List.txt
+ForEach ($name in $names)
+    {
+    if(Test-Connection $name -Count 1 -Quiet -ErrorAction SilentlyContinue)
+        {
+        $Output+= Get-ADComputer -Identity $name -Properties Name,Info | Select-Object Name,Info
+        Write-Host "$name,UP"
+        }
+    else
+        {
+        #Output+= "$name,DOWN"
+        Write-Host "$name,DOWN"
+        }
+    }
+$Output | Export-Csv .\ComputerInfo_If_UP.csv -NoTypeInformation

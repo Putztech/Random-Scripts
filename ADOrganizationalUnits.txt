@@ -1,0 +1,5 @@
+Import-Module ActiveDirectory
+
+Get-ADOrganizationalUnit -Filter * -Properties CanonicalName  | Sort-Object -Property CanonicalName | 
+    Select-Object CanonicalName, Name, DistinguishedName |
+    Export-Csv ".\OUs.csv" -NoTypeInformation

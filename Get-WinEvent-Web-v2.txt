@@ -1,0 +1,520 @@
+﻿<# 
+    .SYNOPSIS 
+        Powershell script to display computer events the easy way. Works on local and remote computers.
+        Script tests for privileges, prompts if not adequate, creates directories, executes script, all with progress indicator. 
+
+		Use like: 
+		Get-WinEvent-Web.ps1 %computername% c:\tmp\myfile.html 1 1 0 0
+		
+		At least the first '1' is needed to activate at least one event type.
+		Event type order: Application System Security Setup
+ 
+    .DESCRIPTION 
+        Get-WinEvent-Web is a script that outputs computer event viewer to a formatted html page, with collumn based search and drop down menus to ease up the task of analising logs. It includes a html popup help for better understading the outputed html page. Use daily for better performance
+ 
+    .PARAMETER  strComputer filename 1 0 0 0 
+		At least the first '1' is needed to activate at least one event type.
+		Event type order: Application System Security Setup
+		
+        Get-WinEvent-Web.ps1 %hostname% c:\tmp\myfile.html 1 1 0 0
+        Get-WinEvent-Web.ps1 fqdn.dns.name c:\tmp\myfile.html 1 1 1 0
+        Get-WinEvent-Web.ps1 ip.add.re.ss  c:\tmp\myfile.html 1 1 1 1
+ 
+    .EXAMPLE 
+        Get-WinEvent-Web.ps1 %hostname% c:\tmp\myfile.html 1 1 0 0
+    .EXAMPLE 
+		Get-WinEvent-Web.ps1 fqdn.dns.name c:\tmp\myfile.html 1 1 1 0
+    .EXAMPLE 
+		Get-WinEvent-Web.ps1 ip.add.re.ss  c:\tmp\myfile.html 1 1 1 1
+         
+    .INPUTS 
+        strComputer can be a local or remote machine dns name or ip address. 
+		File name will be saved under script execution directory
+ 
+    .OUTPUTS 
+        This tool outputs an html formatted web page, with collumn based search and drop down menus to ease up the task of analising logs.
+ 
+    .NOTES 
+        System Requirements: 
+		#	Windows Management Framework 4.0
+		#	http://www.microsoft.com/en-us/download/details.aspx?id=40855
+		#		WMF 4.0 can only be installed on the following operating systems.
+		#			-Windows 7 with Service Pack 1
+		#			-Windows Server 2008 R2 with Service Pack 1
+		#			-Windows Server 2012
+		#		WMF 4.0 requires Microsoft .NET Framework 4.5. 
+		#		You can install Microsoft .NET Framework 4.5 from 
+		#			-http://www.microsoft.com/en-us/download/details.aspx?id=30653
+
+		#	Internet connection for downloading needed files
+		# 	- Introjs by Afshin Mehrabani (http://afshinm.name/)
+		#			- http://usablica.github.io/intro.js/
+		#	- Picnet by Guido Tapia (guido.tapia@picnet.com.au)
+		#			- http://www.picnet.com.au/picnet-table-filter.html
+		#	- JQuery by JQuery Foundation (https://jquery.org/members/ - https://jquery.org/team/)
+		#			- http://jquery.com/download/
+		#	- LibraryChart from Chad Miller (http://sev17.com/)
+		#			- http://poshcode.org/1205
+		
+        Optional: 
+        #	For use with variable input, empty LogFlags 
+         
+        Remote System must meet minimum requirements.  
+        # If not a domain member then perform the following on the remote system to allow admin privileges - http://support.microsoft.com/kb/942817 
+        #    cmd /c reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\system /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f 
+        # If needed add exceptions to the firewall 
+        #    netsh firewall set service type=remoteadmin mode=enable 
+        #    netsh advfirewall firewall set rule service RemoteAdmin enable (?) 
+        #    netsh advfirewall firewall set rule group="windows management instrumentation (wmi)" new enable=yes (?) 
+ 
+    .LINK 
+		http://usablica.github.io/intro.js/
+		http://www.picnet.com.au/picnet-table-filter.html
+		http://jquery.com/download/
+		http://poshcode.org/1205
+     
+    .COMPONENT 
+        Get-WinEvent, IntroJS, Picnet, JQuery 
+ 
+    .ROLE 
+        Admin privileges are required to execute this script. 
+  
+#> 
+
+#Logflags. Activate as needed
+$appApplication = $true #....................Application Log
+$appSystem = $true #.........................System Log
+$appSecurity = $false #......................Security Log
+$appSetup = $true #..........................Setup Log
+$remoteserver = $env:computername #...........Computer Name
+$sfile = "events-"+$remoteserver+".html"#....File Name with computername
+$sfile = "events-WEB.html"#..................File Name (comment this if you want the above one)
+ 
+	#If the above vars are empty, script will prompt for them
+	$HelpMsg = "`r`nIf you would like to automate the process `r`nplease supply the following arguments:`r`n`r`n`tExample: script.ps1 computername filename 1 0 0 1.`r`n`r`nThe first '1' is for Application followed by System, Security and Setup."
+	if (!$remoteserver){if (!$args[0]){Write-Host "No computer specified."$HelpMsg -Foregroundcolor Yellow -backgroundcolor Black;$remoteserver=Read-Host "Computer Name:";if (!$remoteserver){write-host "Exiting ..." -Foregroundcolor Red -backgroundcolor Black;Exit}}else{$remoteserver = $args[0]}}
+
+	if (!$sfile){if (!$args[1]){Write-Host "No output file specified." -Foregroundcolor Yellow -backgroundcolor Black;$sfile=Read-Host "File Name:";if (!$sfile){write-host "Exiting ..."  -Foregroundcolor Red -backgroundcolor Black;Exit}}else{$sfile = $args[1]}}
+	$file = $PSScriptRoot+"\"+$sfile
+
+	if ($args[2] -eq "1"){$appApplication=$true}
+	if ($args[3] -eq "1"){$appSystem=$true}
+	if ($args[4] -eq "1"){$appSecurity=$true}
+	if ($args[5] -eq "1"){$appSetup=$true}
+
+	if ((!$appApplication) -and (!$appSystem) -and (!$appSecurity) -and (!$appSetup)){Write-Host "Nothing to do. No log type activated. `r`nPlease activate at least one type using '1'. `r`n`r`n`tExample: script.ps1 computername filename 1 0 0 1.`r`n`r`nThe first '1' is for Application followed by System, Security and Setup.`r`n`r`n" -Foregroundcolor Yellow -backgroundcolor Black;
+	$aLogs=Read-Host "Activate logs:";$aLogs = $aLogs -split " "; if (!$aLogs[0]){write-host "Exiting ..." -Foregroundcolor Red -backgroundcolor Black;Exit}else{
+		if ($aLogs[0] -eq "1"){$appApplication=$true}else{write-host "Exiting ..." -Foregroundcolor Red -backgroundcolor Black;Exit}
+		if ($aLogs[1] -eq "1"){$appSystem=$true}
+		if ($aLogs[2] -eq "1"){$appSecurity=$true}
+		if ($aLogs[3] -eq "1"){$appSetup=$true}
+		}
+	}
+
+#Script Vars 
+function Set-Culture([System.Globalization.CultureInfo] $culture)
+{
+    [System.Threading.Thread]::CurrentThread.CurrentUICulture = $culture
+    [System.Threading.Thread]::CurrentThread.CurrentCulture = $culture
+}
+Set-Culture 1033
+$ErrorActionPreference = "SilentlyContinue" 
+$appCombined = @{}
+$timeframe = (get-date).AddDays(-1)
+$progress = "."
+$script:libraryChart = ""
+$TableCounts = @()
+$LogCountsError = @{}
+$LogCountsInfo = @{}
+$LogCountsWarning = @{}
+
+Function DoHtml {
+	$a = "<style>"
+	$a = $a + "BODY{background-color:white;}"
+	$a = $a + "TABLE{border-width: 2px;border-style: solid;border-color: black;border-collapse: collapse;table-layout: fixed;}" #table-layout: fixed;
+	$a = $a + "TH{border-width: 2px;padding: 0px;border-style: solid;border-color: black;background-color:lightblue}"
+	$a = $a + "TD{border-width: 2px;padding: 0px;border-style: solid;border-color: black;word-wrap:break-word;text-align: center; }" #display: flex;flex-direction: row;flex-wrap: wrap;justify-content: center;align-items: center;
+	$a = $a + "</style>"		
+	$a = $a + "<title>Event Viewer Logs</title>"
+	$kk = $null
+	$kk | ConvertTo-HTML -head $a | Out-File $file
+}
+	
+	DoHtml
+	$report = new-object System.IO.StreamWriter $file
+	
+#Checking and if not available download LibraryChart to perform some charting on the web page
+Function CheckDownloadLibraryChart {
+	$LibraryChart = "http://poshcode.org/get/1205"
+	$url11 = $LibraryChart.split("/")
+	$LibraryChartFileName = "LibraryChart.ps1"
+	$tempFile = [IO.Path]::GetTempFileName()
+	$scriptPath = $PSScriptRoot+"\"
+	$destDir = $scriptPath
+	$DownloadedFilesDir = $scriptPath+"files"
+	$DownloadedFilesDirTest = Test-Path $DownloadedFilesDir
+		if ( !$DownloadedFilesDirTest )
+		{
+			Write-Host "`r`n`r`ncreating directory files"  -Foregroundcolor Green -backgroundcolor Black
+			md $DownloadedFilesDir | Out-Null
+		}
+	$LibraryChartCheck = Test-Path $DownloadedFilesDir"\"$LibraryChartFileName
+	$script:libraryChart = $DownloadedFilesDir+"\"+$LibraryChartFileName
+		if ( !$LibraryChartCheck )
+		{
+			#Start-BitsTransfer -Source $ChromePass -Destination $DownloadedFilesDir"\"
+			Invoke-WebRequest $LibraryChart -OutFile $script:libraryChart
+		}
+	$k = (Get-Content $script:libraryChart) | Foreach-Object {$_ -replace "global:Chart.Titles.Add..chartTitle.", "global:Chart.Titles.Add(`"Titulo`")"}
+	$k | Out-File -Force -FilePath $script:libraryChart
+	$k4 = (Get-Content $script:libraryChart) | Foreach-Object {$_ -replace "global:Chart.Titles.Add..Warning.Graph..", "global:Chart.Titles.Add(`"Titulo`")"}
+	$k4 | Out-File -Force -FilePath $script:libraryChart
+	
+}
+Function CreateHeader {
+	$report.WriteLine("<html>")
+	$report.WriteLine("<head>")
+	$report.WriteLine("<meta http-equiv='Content-Type' content='text/html; charset=iso-8859-1'>")
+	$report.WriteLine("<title>Event Log Report for Server "+$remoteserver+"</title>")
+	$report.WriteLine('<STYLE TYPE="text/css">')
+	$report.WriteLine("<!--")
+	$report.WriteLine("td {")
+	$report.WriteLine("font-family: Tahoma;")
+	$report.WriteLine("font-size: 11px;")
+	$report.WriteLine("border-top: 2px solid #999999;")
+	$report.WriteLine("border-right: 2px solid #999999;")
+	$report.WriteLine("border-bottom: 2px solid #999999;")
+	$report.WriteLine("border-left: 2px solid #999999;")
+	$report.WriteLine("padding-top: 0px;")
+	$report.WriteLine("padding-right: 0px;")
+	$report.WriteLine("padding-bottom: 0px;")
+	$report.WriteLine("padding-left: 0px;")
+	$report.WriteLine("}")
+	$report.WriteLine("body {")
+	$report.WriteLine("margin-left: 5px;")
+	$report.WriteLine("margin-top: 5px;")
+	$report.WriteLine("margin-right: 0px;")
+	$report.WriteLine("margin-bottom: 10px;")
+	$report.WriteLine("")
+	$report.WriteLine("table {")
+	$report.WriteLine("border: 2px solid #000000;")
+	$report.WriteLine("}")
+	$report.WriteLine("-->")
+	$report.WriteLine("</style>")
+	$report.WriteLine("</head>")
+	
+$java= @('<script type="text/javascript">
+function expandcollapse(obj, row) {
+var div = document.getElementById(obj);
+var divId = div.id;
+var divnum = divId.split("v");
+var trname = "tr";
+var trId = trname.concat(divnum[1]);
+var tr = document.getElementById(trId);
+if (div.style.display == "none") {
+	div.style.display = "block";
+	tr.style.display = "block";
+	}
+	else {
+		div.style.display = "none";
+		tr.style.display = "none";
+	}
+}
+</script>
+
+<link href="files/intro.js-1.0.0/example/assets/css/bootstrap.min.css" rel="stylesheet">
+<link href="files/intro.js-1.0.0/example/assets/css/demo.css" rel="stylesheet">
+<link href="files/intro.js-1.0.0/introjs.css" rel="stylesheet">
+<link href="files/intro.js-1.0.0/example/assets/css/bootstrap-responsive.min.css" rel="stylesheet">
+<script type="text/javascript" src="files/jquery-1.11.1.min.js" type="text/javascript"></script>
+<script type="text/javascript" src="files/picnet.table.filter.min.js"></script>
+<script type="text/javascript" src="files/intro.js-1.0.0/intro.js"></script>
+<script type="text/javascript">
+$(document).ready(function() {$("#demotable").tableFilter();});</script>
+')
+	$report.WriteLine("$java")
+	$report.WriteLine("<font size='6'><center>Event Viewer</font></center>")
+	$report.WriteLine("<div align=`"center`" style='height: 40%'><img style='max-height: 100%' src=`"errorgraph.png`" align=`"middle`" data-step=`"1`" data-intro=`"This is the 'Error' type graph distribution by 'Event' type.`">")
+	$report.WriteLine("<img style='max-height: 100%' src=`"infograph.png`" align=`"middle`" data-step=`"2`" data-intro=`"This is the 'Information' type graph distribution by 'Event' type.`">")
+	$report.WriteLine("<img style='max-height: 100%' src=`"warninggraph.png`" align=`"middle`" data-step=`"3`" data-intro=`"This is the 'Warning' type graph distribution by 'Event' type.`">")
+	$report.WriteLine("</div>")
+	$report.WriteLine("<div class='jumbotron' align='right'><a class='btn btn-large btn-success' href='javascript:void(0);' onclick='javascript:introJs().start();'>Help</a>&nbsp")
+	$report.WriteLine("<a data-step='12' data-intro='Press here to refresh table' class='btn btn-large btn-success' href='javascript:void(0);' onclick='$('#demotable').tableFilterRefresh();'>Refresh</a></div>")
+	$mCount = $null
+	 
+	$report.WriteLine("<body>")
+	$report.WriteLine("<table width='100%'>")
+	$report.WriteLine("<tr bgcolor='#CCCCCC'>")
+	$report.WriteLine("<td colspan='7' height='25' align='center'>")
+	$tt = "<font face='tahoma' color='#003399' size='4'><strong>Event Logs Collection From Server "+$remoteserver.ToUpper()+"</strong></font>"
+	$report.WriteLine($tt)
+	$report.WriteLine("</td>")
+	$report.WriteLine("</tr>")
+	$report.WriteLine("</table>")
+	$report.WriteLine("<table id='demotable' style=`"width:100%;height:100%;table-layout: fixed;`">")
+	$tableValues = "<thead><tr bgcolor=#CCCCCC><th filter-type='ddl' data-step='4' data-intro='Change here to select between diferent types of logs.'>Name</th><th data-step='7' data-intro='Search here to select between diferent times.'>Time</th><th filter-type='ddl' data-step='8' data-intro='Change here to select between diferent log types.'>Type</th><th filter-type='ddl' data-step='9' data-intro='Change here to select between diferent log sources.'>Source</th><th filter-type='ddl' data-step='10' data-intro='Change here to select between diferent EventIDs.'>EventID</th><th data-step='11' data-intro='Search here within diferent event messages.'>Message</th></tr></thead><tbody>"
+	$report.WriteLine("$tableValues")
+}
+Function CreateBody {
+	foreach ($line in $appCombined){
+    write-host $progress -nonewline -Foregroundcolor Green -backgroundcolor Black
+		$expandvar1 = "Event Info"
+		$expandvar2 = ($line | select Message).Message
+		$mll = $line -split ";" 
+		$mtime = ($line | select timecreated).timecreated
+		$mname = ($line | select LevelDisplayName).LevelDisplayName
+		$mprov = ($line | select ProviderName).ProviderName
+		$mid = ($line | select id).id
+	#	write-host $mll
+	    $expandTeste = "<a href=`"javascript:expandcollapse('me"+$o+"', 'one');`">"+$expandvar1+"</a><div id=`"me"+$o+"`" style=`"display:none; position:relative; left:15px; OVERFLOW:auto; WIDTH:98%`" ><ul align='left'><li>"+$expandvar2+"</li></ul></div>"
+
+		$content = "$line.LogName $line.TimeCreated $line.LevelDisplayName $line.ProviderName $line.Id $line.Message;"
+		if ($line.LevelDisplayName -eq "Error")
+	  	{
+		  $report.WriteLine("<tr>")
+		  $mindex = "<td bgcolor='#FF0000' align='center'>"+ $line.LogName +"</td>"
+		  $report.WriteLine($mindex) 
+		  $1 = "<td bgcolor='#FF0000' align=center>"+$mtime+"</td>"
+		  $report.WriteLine($1)
+		  $1 = "<td bgcolor='#FF0000' align=center>$mname</td>"
+		  $report.WriteLine($1)
+		  $1 = "<td bgcolor='#FF0000' align=center>$mprov</td>"
+		  $report.WriteLine($1)
+		  $1 = "<td bgcolor='#FF0000' align=center><a href=`"http://www.eventid.net/display.asp?eventid=$mid&source=`">$mid</a></td>"
+		  $report.WriteLine($1)
+		  $1 = "<td bgcolor='#FF0000' align='center'>$expandTeste</td>"
+		  $report.WriteLine($1)
+		  $report.WriteLine("</tr>")
+	  }
+	  else{
+		  if ($line.LevelDisplayName -eq "Warning")
+		  {
+			  $mindex = "<td bgcolor='#FFF000' align='center'>"+ $line.LogName +"</td>"
+			  $report.WriteLine("<tr>")
+			  $report.WriteLine($mindex)
+			  $report.WriteLine("<td bgcolor='#FFF000' align=center>$mtime</td>")
+			  $report.WriteLine("<td bgcolor='#FFF000' align=center>$mname</td>")
+			  $report.WriteLine("<td bgcolor='#FFF000' align=center>$mprov</td>")
+			  $report.WriteLine("<td bgcolor='#FFF000' align=center><a href=`"http://www.eventid.net/display.asp?eventid=$mid&source=`">$mid</a></td>")
+			  $report.WriteLine("<td bgcolor='#FFF000' align='center'>$expandTeste</td>")
+			  $report.WriteLine("</tr>")
+		  }
+			 else{  
+				  if ($line.LevelDisplayName -eq "Information")
+				  {
+				  $mindex = "<td align='center'>"+ $line.LogName +"</td>"
+				  $report.WriteLine("<tr>")
+				  $report.WriteLine($mindex)
+				  $report.WriteLine("<td align=center>$mtime</td>")
+				  $report.WriteLine("<td align=center>$mname</td>")
+				  $report.WriteLine("<td align=center>$mprov</td>")
+				  $report.WriteLine("<td align=center><a href=`"http://www.eventid.net/display.asp?eventid=$mid&source=`">$mid</a></td>")
+				  $report.WriteLine("<td align='center'>$expandTeste</td>")
+				  $report.WriteLine("</tr>")
+				  }
+			  else{
+				  $mindex = "<td align='center'>"+ $line.LogName +"</td>"
+			  	  $report.WriteLine("<tr>")
+				  $report.WriteLine($mindex)
+				  $report.WriteLine("<td align=center>$mtime</td>")
+				  $report.WriteLine("<td align=center>$mname</td>")
+				  $report.WriteLine("<td align=center>$mprov</td>")
+				  $report.WriteLine("<td align=center><a href=`"http://www.eventid.net/display.asp?eventid=$mid&source=`">$mid</a></td>")
+				  $report.WriteLine("<td align='center'>$expandTeste</td>")
+				  $report.WriteLine("</tr>")
+			  }
+		}
+	}
+	$progess++
+	$o = $o+1
+	$script:cc = $o
+	$error
+	}
+	$report.WriteLine("</tbody>")
+	$report.WriteLine("</table>")
+	$report.WriteLine("</body>")
+	$report.WriteLine("</html>")
+}
+Function CreateGraphs {
+	$appCombined | select LogName,LevelDisplayName | %{$TableCounts += $_.LogName+","+$_.LevelDisplayName}
+	
+	$ErrorTable = $TableCounts | sort | Select-String "Error" 
+
+	$ApplicationError = ($ErrorTable | Select-String "Application").Count;if (-not !$ApplicationError){$LogCountsError.Add("Application",$ApplicationError)}
+	$SystemError = ($ErrorTable | Select-String "System").Count;if (-not !$SystemError){$LogCountsError.Add("System",$SystemError)}
+	$SecurityError = ($ErrorTable | Select-String "Security").Count;if (-not !$SecurityError){$LogCountsError.Add("Security",$SecurityError)} 
+	$SetupError = ($ErrorTable | Select-String "Setup").Count;if (-not !$SetupError){$LogCountsError.Add("Setup",$SetupError)} 
+
+	$InfoTable = $TableCounts | sort | Select-String "Information" 
+
+	$ApplicationInfor = ($InfoTable | Select-String "Application").Count;if (-not !$ApplicationInfor){$LogCountsInfo.Add("Application",$ApplicationInfor)}
+	$SystemInfor = ($InfoTable | Select-String "System").Count;if (-not !$SystemInfor){$LogCountsInfo.Add("System",$SystemInfor)}
+	$SecurityInfor = ($InfoTable | Select-String "Security").Count;if (-not !$SecurityInfor){$LogCountsInfo.Add("Security",$SecurityInfor)} 
+	$SetupInfor = ($InfoTable | Select-String "Setup").Count;if (-not !$SetupInfor){$LogCountsInfo.Add("Setup",$SetupInfor)} 
+
+	$WarningTable = $TableCounts | sort | Select-String "Warning" 
+
+	$ApplicationWarning = ($WarningTable | Select-String "Application").Count;if (-not !$ApplicationWarning){$LogCountsWarning.Add("Application",$ApplicationWarning)}
+	$SystemWarning = ($WarningTable | Select-String "System").Count;if (-not !$SystemWarning){$LogCountsWarning.Add("System",$SystemWarning)}
+	$SecurityWarning = ($WarningTable | Select-String "Security").Count;if (-not !$SecurityWarning){$LogCountsWarning.Add("Security",$SecurityWarning)} 
+	$SetupWarning = ($WarningTable | Select-String "Setup").Count;if (-not !$SetupWarning){$LogCountsWarning.Add("Setup",$SetupWarning)} 
+
+	$1k = (Get-Content $script:libraryChart) | Foreach-Object {$_ -replace "global:Chart.Titles.Add..Titulo..", "global:Chart.Titles.Add(`"Error Graph`")"}
+	$1k | Out-File -Force -FilePath $script:libraryChart
+	Import-Module $script:libraryChart
+	$LogCountsError.GetEnumerator() | sort-object | select Name,Value | out-chart -xField 'Name' -yField 'Value' -filename $PSScriptRoot"\errorgraph.png" -chartType 'Pie' -chartTitle "Error"
+	Remove-Module LibraryChart
+	
+	$2k = (Get-Content $script:libraryChart) | Foreach-Object {$_ -replace "global:Chart.Titles.Add..Error.Graph..", "global:Chart.Titles.Add(`"Info Graph`")"}
+	$2k | Out-File -Force -FilePath $script:libraryChart
+	Import-Module $script:libraryChart 
+	$LogCountsInfo.GetEnumerator() | sort-object | select Name,Value | out-chart -xField 'Name' -yField 'Value' -filename $PSScriptRoot"\infograph.png" -chartType 'Pie'
+	Remove-Module LibraryChart
+
+	$3k = (Get-Content $script:libraryChart) | Foreach-Object {$_ -replace "global:Chart.Titles.Add..Info.Graph..", "global:Chart.Titles.Add(`"Warning Graph`")"}
+	$3k | Out-File -Force -FilePath $script:libraryChart
+	Import-Module $script:libraryChart
+	$LogCountsWarning.GetEnumerator() | sort-object | select Name,Value | out-chart -xField 'Name' -yField 'Value' -filename $PSScriptRoot"\warninggraph.png" -chartType 'Pie'
+	Remove-Module LibraryChart
+
+}
+Function StartLogRetrival {
+	write-host "Start capturing events on"$remoteserver.ToUpper() -Foregroundcolor Green -backgroundcolor Black
+	write-host "Grab since: $timeframe `r`n" -Foregroundcolor Green -backgroundcolor Black
+	$allcount = 0
+
+	#Try to perform operation with session credentials if "unauthorized" ask user
+	$creds = ""
+	$Error.Clear()
+	Get-WinEvent -FilterHashTable @{LogName='Application'; StartTime=((Get-Date).AddDays(-1))} -ErrorAction SilentlyContinue -ComputerName $remoteserver
+	if ($Error -imatch "Attempted to perform an unauthorized operation"){Write-Host "Unauthautorized Access ! Asking user for credentials ..." -Foregroundcolor Red -backgroundcolor Black;$creds = Get-Credential;$controlVar = $true}
+	$Error.Clear()
+	if ($controlVar -eq "True"){Get-WinEvent -FilterHashTable @{LogName='Application'; StartTime=((Get-Date).AddDays(-1))} -ErrorAction SilentlyContinue -ComputerName $remoteserver -Credential $creds;
+	if ($Error -imatch "Attempted to perform an unauthorized operation"){Write-Host "Unauthautorized Access ! Exiting ..." -Foregroundcolor Red -backgroundcolor Black;Exit}}
+
+if ($controlVar -eq "True"){
+	Write-Host "`tCollecting Applications logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appApplication -eq $true){$evtTypes += "Application,";$appApplication = Get-WinEvent -FilterHashTable @{LogName='Application'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver -Credential $creds| Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appApplication.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting System logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSystem -eq $true){$evtTypes += "System,";$appSystem = Get-WinEvent -FilterHashTable @{LogName='System'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver -Credential $creds| Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSystem.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting Security logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSecurity -eq $true){$evtTypes += "Security,";$appSecurity = Get-WinEvent -FilterHashTable @{LogName='Security'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver -Credential $creds| Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSecurity.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting Setup logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSetup -eq $true){$evtTypes += "Setup,";$appSetup = Get-WinEvent -FilterHashTable @{LogName='Setup'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver -Credential $creds| Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSetup.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+}else{
+	Write-Host "`tCollecting Applications logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appApplication -eq $true){$evtTypes += "Application,";$appApplication = Get-WinEvent -FilterHashTable @{LogName='Application'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver | Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appApplication.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting System logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSystem -eq $true){$evtTypes += "System,";$appSystem = Get-WinEvent -FilterHashTable @{LogName='System'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver | Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSystem.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting Security logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSecurity -eq $true){$evtTypes += "Security,";$appSecurity = Get-WinEvent -FilterHashTable @{LogName='Security'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver | Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSecurity.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+	Write-Host "`tCollecting Setup logs" -Foregroundcolor Green -backgroundcolor Black
+	if ($appSetup -eq $true){$evtTypes += "Setup,";$appSetup = Get-WinEvent -FilterHashTable @{LogName='Setup'; StartTime=$timeframe} -ErrorAction SilentlyContinue -ComputerName $remoteserver | Select-Object TimeCreated,LogName,ProviderName,Id,LevelDisplayName,Message;$mcount = 0;$mcount = $appSetup.Count;$allcount = $mcount+$allcount;Write-Host "`tFinished collecting $mcount events`r`n" -Foregroundcolor Green -backgroundcolor Black}else{Write-Host "`tNone`r`n" -Foregroundcolor Green -backgroundcolor Black}
+}
+write-host "Parsing $allcount events of type: $evtTypes `r`n" -Foregroundcolor Green -backgroundcolor Black
+
+	$appCombined = $appSetup + $appApplication + $appSystem + $appSecurity | Sort TimeCreated -Descending
+
+	#Creating web page
+	CreateHeader
+	CreateBody
+	#Creating graphs for web page
+	CheckDownloadLibraryChart
+	Write-Host "`r`n`r`nStart creating graphs" -Foregroundcolor Green -backgroundcolor Black
+	CreateGraphs
+}
+
+$measureTime = Measure-Command {StartLogRetrival}
+$report.flush()
+$report.close()
+Write-Host "`r`nFinished creating report" -Foregroundcolor Green -backgroundcolor Black
+write-host "Executed in"$measureTime.Minutes"Minutes"$measureTime.Seconds"Second"$measureTime.Milliseconds"Milliseconds" -Foregroundcolor Green -backgroundcolor Black
+
+#Checking for IntroJS, JQuery and Picnet
+function Expand-ZIPFile($file, $destinationzip) {
+	$shell = new-object -com shell.application
+	$zip = $shell.NameSpace($file)
+	foreach($item in $zip.items())
+		{
+			$shell.Namespace($destinationzip).copyhere($item)
+		}
+}
+Function CheckDownloadIntroJs {
+	$IntroJs = "https://github.com/usablica/intro.js/archive/v1.0.0.zip"
+	$url11 = $IntroJs.split("/")
+	$IntroJsFileName = "IntroJs-v1.zip"
+	$tempFile = [IO.Path]::GetTempFileName()
+	$scriptPath = $PSScriptRoot+"\"
+	$destDir = $scriptPath
+	$DownloadedFilesDir = $scriptPath+"files"
+	$DownloadedFilesDirTest = Test-Path $DownloadedFilesDir
+		if ( !$DownloadedFilesDirTest )
+		{
+			Write-Host "`r`n`r`ncreating directory files"  -Foregroundcolor Green -backgroundcolor Black
+			md $DownloadedFilesDir | Out-Null
+		}
+	$IntroJsCheck = Test-Path $DownloadedFilesDir"\"$IntroJsFileName
+		if ( !$IntroJsCheck )
+		{
+			#Start-BitsTransfer -Source $ChromePass -Destination $DownloadedFilesDir"\"
+			Invoke-WebRequest $IntroJs -OutFile $DownloadedFilesDir"\"$IntroJsFileName
+		}
+	$IntroFilesCheck = Test-Path $DownloadedFilesDir"\intro.js-1.0.0"
+	if (!$IntroFilesCheck)
+		{
+			Expand-ZIPFile -file $DownloadedFilesDir"\"$IntroJsFileName -destinationzip $DownloadedFilesDir
+		}
+}
+Function CheckDownloadJQuery {
+	$JQuery = "http://code.jquery.com/jquery-1.11.1.min.js"
+	$url11 = $JQuery.split("/")
+	$JQueryFileName = $url11[3]
+	$tempFile = [IO.Path]::GetTempFileName()
+	$scriptPath = $PSScriptRoot+"\"
+	$destDir = $scriptPath
+	$DownloadedFilesDir = $scriptPath+"files"
+	$DownloadedFilesDirTest = Test-Path $DownloadedFilesDir
+		if ( !$DownloadedFilesDirTest )
+		{
+			Write-Host "`r`n`r`ncreating directory files"  -Foregroundcolor Green -backgroundcolor Black
+			md $DownloadedFilesDir | Out-Null
+		}
+	$JQueryCheck = Test-Path $DownloadedFilesDir"\"$JQueryFileName
+		if ( !$JQueryCheck )
+		{
+			#Start-BitsTransfer -Source $ChromePass -Destination $DownloadedFilesDir"\"
+			Invoke-WebRequest $JQuery -OutFile $DownloadedFilesDir"\"$JQueryFileName
+		}
+}
+Function CheckDownloadPicnet {
+	$Picnet = "https://raw.githubusercontent.com/PicNet/picnet_closure_repo/master/picnet.table.filter.min.js"
+	$url11 = $Picnet.split("/")
+	$PicnetFileName = $url11[6]
+	$tempFile = [IO.Path]::GetTempFileName()
+	$scriptPath = $PSScriptRoot+"\"
+	$destDir = $scriptPath
+	$DownloadedFilesDir = $scriptPath+"files"
+	$DownloadedFilesDirTest = Test-Path $DownloadedFilesDir
+		if ( !$DownloadedFilesDirTest )
+		{
+			Write-Host "`r`n`r`ncreating directory files"  -Foregroundcolor Green -backgroundcolor Black
+			md $DownloadedFilesDir | Out-Null
+		}
+	$PicnetCheck = Test-Path $DownloadedFilesDir"\"$PicnetFileName
+		if ( !$PicnetCheck )
+		{
+			#Start-BitsTransfer -Source $Picnet -Destination $DownloadedFilesDir"\"
+			Invoke-WebRequest $Picnet -OutFile $DownloadedFilesDir"\"$PicnetFileName -UserAgent ([Microsoft.PowerShell.Commands.PSUserAgent]::InternetExplorer)
+		}
+}
+Function CheckFiles {
+	CheckDownloadPicnet
+	CheckDownloadJQuery
+	CheckDownloadIntroJs
+}
+
+$measureTime = Measure-Command{CheckFiles}
+Write-Host "`r`nFinished checking and downloading needed files" -Foregroundcolor Green -backgroundcolor Black
+write-host "Executed in"$measureTime.Minutes"Minutes"$measureTime.Seconds"Second"$measureTime.Milliseconds"Milliseconds" -Foregroundcolor Green -backgroundcolor Black
+
+start $file

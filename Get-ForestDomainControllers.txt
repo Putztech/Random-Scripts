@@ -1,0 +1,1 @@
+﻿(Get-Forest).Domains | %{ Get-ADDomainController -Filter * -Server $_ } | Select-Object HostName, IPv4Address | Out-File .\DC.txt

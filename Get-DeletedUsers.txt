@@ -1,0 +1,5 @@
+﻿[datetime]$StartTime = "4/26/2018"
+[datetime]$EndTime = "5/1/2018"
+
+Get-AdObject -Filter {(isdeleted -eq $true) -and (name -ne "Deleted Objects") -and (ObjectClass -eq "user")} -IncludeDeletedObjects -Property whenChanged |
+Where-Object {$_.whenChanged -ge $StartTime -and $_.whenChanged -le $EndTime} | Select-Object Name,whenChanged | Export-Csv Get_DeletedAccounts.csv -NoTypeInformation
